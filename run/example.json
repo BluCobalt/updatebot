@@ -1,0 +1,10 @@
+{
+  "resolutionStrategy": "mavenRepository",
+  "url": "https://maven.legacyfabric.net/",
+  "updateInterval": 300,
+  "runArgs": [
+    "java", "-Xmx64M", "-Xms32M", "-Xquickstart", "-Xtune:virtualized","-jar", "{artifact}"
+  ],
+  "groupId": "net.legacyfabric",
+  "artifactId": "fabric-meta"
+}
