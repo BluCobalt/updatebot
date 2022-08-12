@@ -25,7 +25,7 @@ import java.util.TimerTask;
 
 public class Updater
 {
-    private static Logger LOGGER = LogManager.getLogger("UpdaterV2");
+    private static final Logger LOGGER = LogManager.getLogger("UpdaterV2");
     private static int running = 0;
     private static Process process = null;
 
@@ -59,9 +59,9 @@ public class Updater
     }
 
     private static void maven(JsonConfig config)
-            throws IOException, ParserConfigurationException, SAXException
+            throws IOException
     {
-        // if the url specified in the config doesnt have a trailing slash, add one and then just add the groupid
+        // if the url specified in the config doesn't have a trailing slash, add one and then just add the groupid
         // and artifactid and the maven-metadata.xml
         URL metadataXml = new URL(
                 ((config.url.charAt(config.url.length() - 1) == '/') ? config.url : config.url + "/") +
@@ -84,12 +84,11 @@ public class Updater
                        LOGGER.info("New version available: " + version);
                        URL download = new URL(
                                ((config.url.charAt(
-                                       config.url.length() - 1) == '/') ? config.url : config.url + "/") +                         // https://maven.legacyfabric.net/
-                                       config.groupId.replace(".",
-                                               "/") + "/" + config.artifactId + "/" +                                    // https://maven.legacyfabrcic.net/net/legacyfabric/fabric-meta
-                                       rawVersion +                                                                                // https://maven.legacyfabrcic.net/net/legacyfabric/fabric-meta/1.6.7
-                                       "/" + config.artifactId + "-" + rawVersion + ".jar"
-                               // https://maven.legacyfabrcic.net/net/legacyfabric/fabric-meta/1.6.7/fabric-meta-1.6.7.jar
+                                       config.url.length() - 1) == '/') ? config.url : config.url + "/") +                  // https://maven.legacyfabric.net/
+                                       config.groupId.replace(".", "/") + "/" + config.artifactId + "/" +  // https://maven.legacyfabrcic.net/net/legacyfabric/fabric-meta/
+                                       rawVersion +                                                                         // https://maven.legacyfabrcic.net/net/legacyfabric/fabric-meta/1.6.7
+                                       "/" + config.artifactId + "-" + rawVersion + ".jar"                                  // https://maven.legacyfabrcic.net/net/legacyfabric/fabric-meta/1.6.7/fabric-meta-1.6.7.jar
+
                        );
                        InputStream downloadStream = download.openConnection().getInputStream();
                        while (process != null && process.isAlive())
