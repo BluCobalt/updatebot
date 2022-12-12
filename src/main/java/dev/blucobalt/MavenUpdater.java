@@ -56,6 +56,8 @@ public class MavenUpdater extends Updater {
 
     @Override
     public void consumeConfig(JsonConfig config) {
+        config.groupId = config.groupId.replace(".", "/");
+
         this.repositoryURL = config.url;
         this.groupId = config.groupId;
         this.artifactId = config.artifactId;
