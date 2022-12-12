@@ -1,120 +1,133 @@
 package dev.blucobalt;
 
-
-import com.google.gson.Gson;
-import org.apache.logging.log4j.Level;
+import lombok.SneakyThrows;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.core.config.Configurator;
-import org.w3c.dom.Document;
-import org.xml.sax.SAXException;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URL;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.concurrent.TimeUnit;
 
-public class Updater
-{
-    private static final Logger LOGGER = LogManager.getLogger("UpdaterV2");
-    private static int running = 0;
-    private static Process process = null;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
-    public static void main(String[] args)
-            throws IOException, ParserConfigurationException, SAXException
+@SuppressWarnings("SwitchStatementWithTooFewBranches")
+public abstract class Updater
+    implements Runnable {
+    private static final Logger LOGGER = LogManager.getLogger("Updater");
+    private final Path downloadPath = Path.of("latest.bin");
+    private final JsonConfig config;
+    private Process process;
+
+    private String runningVersion;
+
+    public Updater(JsonConfig config) {
+        this.config = config;
+        this.consumeConfig(config);
+    }
+
+    protected abstract void consumeConfig(JsonConfig config);
+
+    protected abstract String getLatestVersion();
+
+    protected abstract URL getDownloadURL(String version);
+
+    protected abstract String getDownloadName(String version);
+
+    @SneakyThrows
+    private boolean update0(String version)
     {
-        // I cant figure out how to set the level to info non-programmatically
-        Configurator.setRootLevel(Level.INFO);
-        JsonConfig config = null;
-        try
+        URL downloadURL = this.getDownloadURL(version);
+        Files.copy(downloadURL.openStream(), downloadPath, REPLACE_EXISTING);
+
+        // stop any existing process
+        if (this.process != null && this.process.isAlive())
         {
-            Path configPath = Paths.get(System.getProperty("updater.config", "updater.json"));
-            LOGGER.info("Loading from: " + configPath.toAbsolutePath());
-            config = new Gson().fromJson(Files.newBufferedReader(configPath), JsonConfig.class);
-        } catch (IOException e)
-        {
-            LOGGER.error("Couldn't read config file", e);
-            System.exit(1);
+            if (this.process.supportsNormalTermination())
+            {
+                LOGGER.info("waiting {} seconds for graceful shutdown".replace("{}", String.valueOf(this.config.gracefulShutdownTimeout)));
+                this.process.destroy();
+                this.process.children().forEach(ProcessHandle::destroy);
+                this.process.waitFor(this.config.updateInterval, TimeUnit.SECONDS);
+            }
+
+            if (this.process.isAlive())
+            {
+                while (this.process.isAlive())
+                {
+                    LOGGER.info("forcibly terminating process");
+                    this.process.destroyForcibly();
+                    this.process.children().forEach(ProcessHandle::destroyForcibly);
+                }
+            }
         }
-        // I'll add more later
-        //noinspection SwitchStatementWithTooFewBranches
-        switch (config.resolutionStrategy)
-        {
-            case mavenRepository:
-                maven(config);
-                break;
+
+        switch(this.config.nameStrategy){
+            case versionSubstitution:
             default:
-                LOGGER.error("Unknown resolution strategy: " + config.resolutionStrategy);
+                // change default name to match whatever matches in the config
+                Files.move(downloadPath, downloadPath.resolveSibling(this.getDownloadName(version)), REPLACE_EXISTING);
+                this.config.runArgs = Arrays.stream(this.config.runArgs).map(arg -> arg.replace("{version}", version)).toArray(String[]::new);
+                break;
+        }
+        this.process = new ProcessBuilder(this.config.runArgs).inheritIO().start();
+        return this.process.isAlive();
+    }
+
+    public void update(String version)
+    {
+        LOGGER.info("downloading version " + version);
+        if (this.update0(version)) {
+            LOGGER.info("successfully updated to version " + version);
+            this.runningVersion = version;
+        } else {
+            LOGGER.error("failed to update to version " + version + "with exit code " + this.process.exitValue());
+            LOGGER.warn("trying to restore previous version");
+            if (this.update0(this.runningVersion)) {
+                LOGGER.info("successfully restored to version " + this.runningVersion);
+            } else {
+                LOGGER.error("failed to restore to version " + this.runningVersion + " with exit code " + this.process.exitValue());
+                LOGGER.error("please manually restore to version " + this.runningVersion);
+                LOGGER.fatal("could not update or restore to previous version");
                 System.exit(1);
+            }
         }
     }
 
-    private static void maven(JsonConfig config)
-            throws IOException
+    public boolean checkAndUpdate()
     {
-        // if the url specified in the config doesn't have a trailing slash, add one and then just add the groupid
-        // and artifactid and the maven-metadata.xml
-        URL metadataXml = new URL(
-                ((config.url.charAt(config.url.length() - 1) == '/') ? config.url : config.url + "/") +
-                        config.groupId.replace(".", "/") + "/" + config.artifactId + "/maven-metadata.xml");
-       Timer timer = new Timer();
-       timer.schedule(new TimerTask()
-       {
-           @Override
-           public void run()
-           {
-               try {
-                   InputStream versionStream = metadataXml.openConnection().getInputStream();
-                   DocumentBuilder db = DocumentBuilderFactory.newInstance().newDocumentBuilder();
-                   Document document = db.parse(versionStream);
-                   versionStream.close();
-                   String rawVersion = document.getElementsByTagName("latest").item(0).getTextContent();
-                   int version = Integer.parseInt(rawVersion.replaceAll("\\D", ""));
-                   if (version > running)
-                   {
-                       LOGGER.info("New version available: " + version);
-                       URL download = new URL(
-                               ((config.url.charAt(
-                                       config.url.length() - 1) == '/') ? config.url : config.url + "/") +                  // https://maven.legacyfabric.net/
-                                       config.groupId.replace(".", "/") + "/" + config.artifactId + "/" +  // https://maven.legacyfabrcic.net/net/legacyfabric/fabric-meta/
-                                       rawVersion +                                                                         // https://maven.legacyfabrcic.net/net/legacyfabric/fabric-meta/1.6.7
-                                       "/" + config.artifactId + "-" + rawVersion + ".jar"                                  // https://maven.legacyfabrcic.net/net/legacyfabric/fabric-meta/1.6.7/fabric-meta-1.6.7.jar
+        String latestVersion = this.getLatestVersion();
+        if (latestVersion == null)
+        {
+            LOGGER.error("failed to get latest version");
+            return false;
+        }
+        if (this.runningVersion == null || !this.runningVersion.equals(latestVersion))
+        {
+            LOGGER.info("updating to " + latestVersion);
+            this.update(latestVersion);
+            this.runningVersion = latestVersion;
+            return true;
+        }
+        return false;
+    }
 
-                       );
-                       InputStream downloadStream = download.openConnection().getInputStream();
-                       while (process != null && process.isAlive())
-                       {
-                           process.destroy();
-                           LOGGER.warn("Waiting for process to die before updating");
-                       }
-                       try
-                       {
-                           Files.copy(downloadStream, Paths.get(config.artifactId + "-" + rawVersion + ".jar"));
-                       } catch (FileAlreadyExistsException ignored)
-                       {}
-                       downloadStream.close();
-                       String artifact = config.artifactId + "-" + rawVersion + ".jar";
-                       LOGGER.info("Downloaded: " + artifact);
-                       ProcessBuilder pb = new ProcessBuilder(
-                               Arrays.stream(config.runArgs).map(s -> s.replace("{artifact}", artifact))
-                                       .toArray(String[]::new));
-                       pb.inheritIO();
-                       Updater.process = pb.start();
-                       Updater.running = version;
-                   }
-               } catch (IOException | SAXException | ParserConfigurationException e) {
-                   LOGGER.error("There was an exception trying to run the update", e);
-               }
-           }
-       }, 0, config.updateInterval * 1000L);
+    int updateInterval = 0;
+
+    @Override
+    public void run()
+    {
+        if (this.checkAndUpdate()) {
+            LOGGER.info("updated to " + this.runningVersion);
+        }
+        updateInterval++;
+        if (updateInterval == 100)
+        {
+            LOGGER.info("sanity check - 100 update intervals have passed");
+            updateInterval = 0;
+        }
     }
 }
