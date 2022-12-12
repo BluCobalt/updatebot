@@ -28,7 +28,7 @@ tasks.getByName<Test>("test") {
 }
 
 tasks.compileJava {
-    options.release.set(11)
+    options.release.set(17)
 }
 
 val jar by tasks.getting(Jar::class) {
@@ -39,4 +39,11 @@ val jar by tasks.getting(Jar::class) {
 
 application {
     mainClass.set("dev.blucobalt.Entrypoint")
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+        implementation.set(JvmImplementation.J9)
+    }
 }

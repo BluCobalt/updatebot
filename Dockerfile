@@ -1,4 +1,4 @@
-FROM adoptopenjdk/openjdk11-openj9:alpine-jre
+FROM ibm-semeru-runtimes:open-17-jre-jammy
 ADD run /updater/
 WORKDIR /updater/
 ADD build/libs/updater-2.0.0-all.jar /updater/
