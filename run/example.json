@@ -3,6 +3,7 @@
   "nameStrategy": "versionSubstitution",
   "url": "https://maven.legacyfabric.net/",
   "updateInterval": 300,
+  "gracefulShutdownTimeout": 10,
   "runArgs": [
     "java", "-Xmx128M", "-Xms32M", "-Xquickstart", "-Xtune:virtualized","-jar", "fabric-meta-{version}.jar"
   ],

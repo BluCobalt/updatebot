@@ -121,7 +121,7 @@ public abstract class Updater
         return false;
     }
 
-    int updateInterval = 0;
+    private int updateInterval = 0;
 
     @Override
     public void run()
