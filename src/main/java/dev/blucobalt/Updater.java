@@ -33,22 +33,28 @@ public abstract class Updater
 
     protected abstract String getLatestVersion();
 
-    protected abstract URL getDownloadURL(String version);
+    protected abstract URL getDownloadURL(String version) throws IOException;
+
 
     protected abstract String getDownloadName(String version);
 
     @SneakyThrows
     private boolean update0(String version)
     {
-        URL downloadURL = this.getDownloadURL(version);
-        Files.copy(downloadURL.openStream(), downloadPath, REPLACE_EXISTING);
-
+       try {
+           URL downloadURL = this.getDownloadURL(version);
+           Files.copy(downloadURL.openStream(), downloadPath, REPLACE_EXISTING);
+       } catch (IOException e) {
+           LOGGER.error("Failed to download update", e);
+           e.printStackTrace();
+           return false;
+       }
         // stop any existing process
         if (this.process != null && this.process.isAlive())
         {
             if (this.process.supportsNormalTermination())
             {
-                LOGGER.info("waiting {} seconds for graceful shutdown".replace("{}", String.valueOf(this.config.gracefulShutdownTimeout)));
+                LOGGER.info("waiting ${String.valueOf(this.config.gracefulShutdownTimeout)} seconds for graceful shutdown");
                 this.process.destroy();
                 this.process.children().forEach(ProcessHandle::destroy);
                 this.process.waitFor(this.config.updateInterval, TimeUnit.SECONDS);
@@ -79,12 +85,12 @@ public abstract class Updater
 
     public void update(String version)
     {
-        LOGGER.info("downloading version " + version);
+        LOGGER.info("downloading version $version");
         if (this.update0(version)) {
-            LOGGER.info("successfully updated to version " + version);
+            LOGGER.info("successfully updated to version $version");
             this.runningVersion = version;
         } else {
-            LOGGER.error("failed to update to version " + version + "with exit code " + this.process.exitValue());
+            LOGGER.error("failed to update to version $version with exit code " + this.process.exitValue());
             LOGGER.warn("trying to restore previous version");
             if (this.update0(this.runningVersion)) {
                 LOGGER.info("successfully restored to version " + this.runningVersion);
@@ -107,7 +113,7 @@ public abstract class Updater
         }
         if (this.runningVersion == null || !this.runningVersion.equals(latestVersion))
         {
-            LOGGER.info("updating to " + latestVersion);
+            LOGGER.info("updating to $latestVersion");
             this.update(latestVersion);
             this.runningVersion = latestVersion;
             return true;
@@ -121,7 +127,7 @@ public abstract class Updater
     public void run()
     {
         if (this.checkAndUpdate()) {
-            LOGGER.info("updated to " + this.runningVersion);
+            LOGGER.info("updated to ${this.runningVersion}");
         }
         updateInterval++;
         if (updateInterval == 100)

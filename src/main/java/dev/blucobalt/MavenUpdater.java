@@ -7,6 +7,7 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -22,8 +23,7 @@ public class MavenUpdater extends Updater {
         super(config);
     }
 
-    private static String getLatestArtifactVersion(String repositoryUrl, String groupId, String artifactId)
-    {
+    private static String getLatestArtifactVersion(String repositoryUrl, String groupId, String artifactId) {
         // remove any trailing slash
         if (repositoryUrl.endsWith("/")) {
             repositoryUrl = repositoryUrl.substring(0, repositoryUrl.length() - 1);
@@ -69,17 +69,14 @@ public class MavenUpdater extends Updater {
     }
 
     @Override
-    public URL getDownloadURL(String version) {
-        try {
-            // remove trailing slash from repositoryURL if it has one, and just append groupId, artifactId, and version
-            String download = (this.repositoryURL.endsWith("/") ? this.repositoryURL.substring(0, this.repositoryURL.length() - 1) : this.repositoryURL)
-                    + "/" + groupId + "/" + artifactId + "/" + version + "/" + artifactId + "-" + version + ".jar";
-            return new URL(download);
-        } catch (Exception e) {
-            LOGGER.error(e);
-            e.printStackTrace();
-            return null;
-        }
+    public URL getDownloadURL(String version)
+            throws IOException {
+
+        // remove trailing slash from repositoryURL if it has one, and just append groupId, artifactId, and version
+        String download = (this.repositoryURL.endsWith("/") ? this.repositoryURL.substring(0, this.repositoryURL.length() - 1) : this.repositoryURL)
+                + "/" + groupId + "/" + artifactId + "/" + version + "/" + artifactId + "-" + version + ".jar";
+        return new URL(download);
+
     }
 
     @Override

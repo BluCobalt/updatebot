@@ -21,6 +21,11 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-core:2.19.0")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.0")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
+    compileOnly("systems.manifold:manifold-rt:2022.1.29")
+    // Add manifold to -processorpath for javac
+    annotationProcessor("systems.manifold:manifold-strings:2022.1.29")
+    testAnnotationProcessor("systems.manifold:manifold-strings:2022.1.29")
+
 }
 
 tasks.getByName<Test>("test") {
@@ -29,6 +34,7 @@ tasks.getByName<Test>("test") {
 
 tasks.compileJava {
     options.release.set(17)
+    options.compilerArgs.add("-Xplugin:Manifold")
 }
 
 val jar by tasks.getting(Jar::class) {
@@ -44,6 +50,7 @@ application {
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17))
-        implementation.set(JvmImplementation.J9)
+        vendor.set(JvmVendorSpec.ADOPTIUM)
+//        implementation.set(JvmImplementation.)
     }
 }
